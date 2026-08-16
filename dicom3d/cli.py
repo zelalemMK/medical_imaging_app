@@ -36,8 +36,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--iso",
         default=None,
         help=(
-            "Iso-surface level: a number (Hounsfield Units) or a preset "
-            f"({', '.join(HU_PRESETS)}). Default: bone for CT, mid-range otherwise."
+            "Iso-surface level. A raw number, 'auto', or a CT preset "
+            f"({', '.join(HU_PRESETS)}). Default 'auto' = bone (300 HU) for CT, "
+            "or an automatic foreground/outer-surface threshold for MR (which has "
+            "no Hounsfield scale, so the CT presets don't apply to it)."
         ),
     )
     p.add_argument(
@@ -115,7 +117,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: mesh generation failed: {exc}", file=sys.stderr)
         return 1
     print(
-        f"      iso level {mesh.level:g} HU -> "
+        f"      {mesh.metadata.get('surface', 'surface')} at level "
+        f"{mesh.level:g} {mesh.metadata.get('iso_units', '')} -> "
         f"{mesh.metadata['n_vertices']:,} vertices, "
         f"{mesh.metadata['n_faces']:,} faces"
     )

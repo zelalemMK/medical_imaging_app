@@ -11,7 +11,7 @@ import pytest
 from dicom3d import export_mesh, generate_mesh, load_volume
 from dicom3d.mesh import SUPPORTED_FORMATS
 
-from .make_sample import make_series
+from .make_sample import make_mr_series, make_series
 
 
 @pytest.fixture(scope="module")
@@ -132,6 +132,47 @@ def test_compressed_series_loads(tmp_path):
     assert vol.metadata["num_slices"] == 12
     mesh = generate_mesh(vol, iso="bone", largest_only=True)
     assert mesh.metadata["n_faces"] > 0
+
+
+def test_mr_series_uses_auto_foreground_surface(tmp_path):
+    """MR data (no Hounsfield scale) must reconstruct a solid outer surface.
+
+    Regression test: the old code applied a CT-style constant/midpoint level to
+    MR, which only caught the bright fat rim + artifacts and produced a broken,
+    holey shell. The modality-aware auto (Otsu) threshold should instead give a
+    single, near-watertight foreground surface matching the phantom's extent.
+    """
+    make_mr_series(tmp_path / "mr", n=40, size=80)
+    vol = load_volume(tmp_path / "mr")
+    assert vol.metadata["modality"] == "MR"
+
+    mesh = generate_mesh(vol, iso=None, largest_only=True, smooth=True)
+    assert mesh.metadata["iso_units"] == "raw intensity"
+    assert "auto" in mesh.metadata["surface"]
+
+    # The auto threshold must sit well below the bright fat/artifact values
+    # (~1500-3000) so it captures the whole head, not just the rim.
+    assert mesh.level < 1000
+    assert mesh.metadata["n_faces"] > 1000
+
+    # Largest component should span most of the volume (a real outer surface),
+    # not a tiny fragment.
+    tm = mesh.trimesh
+    extent = tm.bounds[1] - tm.bounds[0]
+    phys = np.array([40 * 2.5, 80 * 2.0, 80 * 2.0])  # volume physical size (mm)
+    assert (extent > 0.5 * phys).all()
+
+
+def test_ct_presets_ignored_for_mr(tmp_path):
+    """Passing a CT preset to MR data falls back to the auto threshold rather
+    than applying a meaningless HU constant."""
+    make_mr_series(tmp_path / "mr", n=32, size=72)
+    vol = load_volume(tmp_path / "mr")
+    # 'bone' (300 HU) is meaningless here; should not raise and should produce
+    # a real surface via the auto fallback.
+    mesh = generate_mesh(vol, iso="bone", largest_only=True)
+    assert mesh.metadata["n_faces"] > 1000
+    assert mesh.metadata["iso_units"] == "raw intensity"
 
 
 def test_nifti_export(phantom_zip, tmp_path):

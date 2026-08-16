@@ -103,12 +103,16 @@ PAGE = """<!doctype html>
       <div class="opt">
         <label>Iso surface</label>
         <select name="iso">
-          <option value="">Auto (bone for CT)</option>
-          <option value="bone">Bone (300 HU)</option>
-          <option value="skin">Skin (-300 HU)</option>
-          <option value="soft-tissue">Soft tissue (40 HU)</option>
-          <option value="lung">Lung (-600 HU)</option>
+          <option value="">Auto (bone for CT · outer surface for MRI)</option>
+          <optgroup label="CT presets (Hounsfield Units)">
+            <option value="bone">Bone (300 HU)</option>
+            <option value="skin">Skin (-300 HU)</option>
+            <option value="soft-tissue">Soft tissue (40 HU)</option>
+            <option value="lung">Lung (-600 HU)</option>
+          </optgroup>
         </select>
+        <div class="meta" style="margin-top:6px">MRI has no HU scale — leave on
+          Auto; CT presets are ignored for MR.</div>
       </div>
       <div class="opt">
         <label>Detail</label>

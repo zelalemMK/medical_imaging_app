@@ -49,7 +49,7 @@ If installed with `pip install -e .`, the `dicom3d` command is available directl
 
 | Option | Meaning |
 |---|---|
-| `--iso` | Iso-surface level: a number in Hounsfield Units, or a preset: `bone` (300), `skin` (-300), `soft-tissue` (40), `lung` (-600). Default: bone for CT, mid-range otherwise. |
+| `--iso` | Iso-surface level: a number, `auto`, or a CT preset: `bone` (300 HU), `skin` (-300), `soft-tissue` (40), `lung` (-600). Default `auto` = bone for CT; for **MRI** an automatic foreground/outer-surface threshold (see below). |
 | `-f, --formats` | Comma-separated subset of `stl,obj,ply,glb`. |
 | `--step` | Marching-cubes step; `>1` = coarser, lighter, faster. |
 | `--no-smooth` | Disable Laplacian (Taubin) smoothing. |
@@ -108,6 +108,20 @@ paths = export_mesh(mesh, "out/", formats=("stl", "glb"))
 3. **Surface** — extracts an iso-surface with marching cubes at the chosen
    tissue level, optionally smooths and keeps the largest component.
 4. **Export** — writes STL/OBJ/PLY/GLB (+ optional NIfTI) and a preview PNG.
+
+### CT vs MRI thresholding
+
+CT is calibrated in **Hounsfield Units**, so a fixed level means the same tissue
+on every scanner — `bone = 300 HU` just works, and it's the default.
+
+**MRI has no HU scale.** Intensities are arbitrary and sequence-dependent, and
+bone is actually *dark* (signal void) on most MR sequences — so the CT presets
+are meaningless for MR. Applying a fixed CT-style level to MR only catches the
+brightest voxels (fat, flow) and yields a broken, holey shell. For MR (and any
+non-CT modality) the tool therefore **auto-selects an Otsu threshold** that
+separates the imaged anatomy from background air, giving a clean **outer
+(skin/scalp) surface**. Just leave `--iso` on `auto`; CT presets are ignored for
+MR. You can always pass a raw `--iso <number>` to target a specific intensity.
 
 ## Testing
 

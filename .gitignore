@@ -8,8 +8,8 @@ dist/
 
 # Generated artifacts
 output/
-samples/phantom_dcm/
-samples/phantom.zip
+output_*/
+samples/
 *.stl
 *.obj
 *.ply
