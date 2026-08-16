@@ -16,6 +16,11 @@ dependencies = [
     "trimesh>=4.0",
     "matplotlib>=3.8",
     "nibabel>=5.0",
+    # DICOM pixel decompression (JPEG Lossless, JPEG 2000, JPEG-LS, RLE).
+    "pylibjpeg>=2.0",
+    "pylibjpeg-libjpeg>=2.1",
+    "pylibjpeg-openjpeg>=2.0",
+    "python-gdcm>=3.0.10",
 ]
 
 [project.optional-dependencies]

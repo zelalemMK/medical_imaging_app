@@ -106,6 +106,34 @@ def test_unsupported_format_raises(phantom_zip, tmp_path):
         export_mesh(mesh, tmp_path, formats=("stl", "xyz"))
 
 
+def test_compressed_series_loads(tmp_path):
+    """A losslessly-compressed DICOM series must decode and reconstruct.
+
+    Regression test for the "Unable to decompress ... pixel data" failure on
+    compressed transfer syntaxes (JPEG Lossless / JPEG-LS / RLE).
+    """
+    import pydicom
+    from pydicom.uid import JPEGLSLossless, RLELossless
+
+    make_series(tmp_path / "raw", n=12, size=48)
+    comp = tmp_path / "comp"
+    comp.mkdir()
+    for i, p in enumerate(sorted((tmp_path / "raw").glob("*.dcm"))):
+        ds = pydicom.dcmread(p)
+        for uid in (JPEGLSLossless, RLELossless):
+            try:
+                ds.compress(uid)
+                break
+            except Exception:
+                ds = pydicom.dcmread(p)
+        ds.save_as(comp / f"s{i:03d}.dcm")
+
+    vol = load_volume(comp)
+    assert vol.metadata["num_slices"] == 12
+    mesh = generate_mesh(vol, iso="bone", largest_only=True)
+    assert mesh.metadata["n_faces"] > 0
+
+
 def test_nifti_export(phantom_zip, tmp_path):
     import nibabel as nib
 

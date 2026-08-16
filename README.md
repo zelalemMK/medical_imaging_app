@@ -128,6 +128,8 @@ python tests/make_sample.py samples   # writes samples/phantom.zip + samples/pha
   the mesh files. Handle source DICOMs according to your local regulations.
 - Marching cubes produces a *surface*, not a volumetric/segmented model. For
   clinical segmentation use dedicated tools (3D Slicer) on the exported NIfTI.
-- Multi-frame (enhanced) DICOM and compressed transfer syntaxes rely on
-  `pydicom`'s pixel handlers; install `pylibjpeg`/`gdcm` if you hit compressed
-  data.
+- **Compressed DICOM is supported out of the box.** The decompression backends
+  (`pylibjpeg`, `pylibjpeg-libjpeg`, `pylibjpeg-openjpeg`, `python-gdcm`) are
+  installed as dependencies, covering JPEG Lossless (Process 14 SV1), JPEG 2000,
+  JPEG-LS, and RLE transfer syntaxes. If a backend is somehow missing, the
+  loader raises a clear message telling you exactly what to `pip install`.
