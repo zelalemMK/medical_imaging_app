@@ -153,9 +153,41 @@ def export_mesh(
         )
 
     tm = mesh.trimesh
+    _apply_bone_material(tm)
     written: list[Path] = []
     for fmt in formats:
-        path = out_dir / f"{basename}.{fmt.lower()}"
-        tm.export(path)  # trimesh dispatches on the file extension
+        fmt = fmt.lower()
+        path = out_dir / f"{basename}.{fmt}"
+        if fmt == "obj":
+            # OBJ carries colour only via a separate .mtl file. Suppress it so
+            # every output stays a single self-contained file; GLB and PLY
+            # already embed the colour inline.
+            tm.export(path, include_texture=False, write_texture=False)
+        else:
+            tm.export(path)  # trimesh dispatches on the file extension
         written.append(path)
     return written
+
+
+def _apply_bone_material(tm: trimesh.Trimesh) -> None:
+    """Give the mesh a warm bone-coloured PBR material.
+
+    This makes the GLB render pleasantly in glTF viewers (Windows 3D Viewer,
+    model-viewer, Quick Look) instead of a blown-out default white, and carries
+    a matching colour into PLY/OBJ. STL is geometry-only and ignores it.
+    """
+    bone = [222, 205, 184, 255]  # RGBA, 0-255
+    try:
+        from trimesh.visual.material import PBRMaterial
+
+        tm.visual = trimesh.visual.TextureVisuals(
+            material=PBRMaterial(
+                name="bone",
+                baseColorFactor=bone,
+                metallicFactor=0.0,
+                roughnessFactor=0.75,
+            )
+        )
+    except Exception:
+        # Fall back to per-vertex colours (still exports to PLY/GLB).
+        tm.visual.vertex_colors = bone

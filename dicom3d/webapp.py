@@ -135,7 +135,7 @@ PAGE = """<!doctype html>
   <div class="result" id="result">
     <div class="viewer-wrap">
       <model-viewer id="viewer" camera-controls auto-rotate
-                    shadow-intensity="1" exposure="1.1" tone-mapping="neutral"
+                    shadow-intensity="0.9" exposure="0.85" tone-mapping="neutral"
                     interaction-prompt="none" alt="Interactive 3D model"></model-viewer>
       <span class="viewer-hint">drag to rotate &middot; scroll to zoom</span>
     </div>

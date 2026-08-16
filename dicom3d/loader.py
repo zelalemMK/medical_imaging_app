@@ -143,7 +143,24 @@ def build_volume(datasets: Iterable[FileDataset]) -> Volume:
 
     slices.sort(key=_slice_sort_key)
 
-    volume = np.stack([_rescale(s.pixel_array, s) for s in slices], axis=0)
+    # Decode pixel data slice by slice. Compressed transfer syntaxes (JPEG
+    # Lossless, JPEG 2000, JPEG-LS, RLE) are decoded here via pydicom's plugin
+    # backends; surface a clear, actionable message if a backend is missing.
+    planes = []
+    for s in slices:
+        try:
+            planes.append(_rescale(s.pixel_array, s))
+        except Exception as exc:
+            ts = getattr(getattr(s, "file_meta", None), "TransferSyntaxUID", None)
+            ts_name = getattr(ts, "name", str(ts))
+            raise ValueError(
+                f"Could not decode pixel data (transfer syntax: {ts_name}). "
+                "This usually means a decompression backend is missing. Install "
+                "the decoders with:  pip install pylibjpeg pylibjpeg-libjpeg "
+                "pylibjpeg-openjpeg python-gdcm\n"
+                f"Underlying error: {exc}"
+            ) from exc
+    volume = np.stack(planes, axis=0)
 
     ref = slices[0]
     px = getattr(ref, "PixelSpacing", [1.0, 1.0])
