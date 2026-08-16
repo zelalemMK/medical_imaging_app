@@ -1,5 +1,9 @@
 """Turn a scalar :class:`~dicom3d.loader.Volume` into a surface mesh and export it
-to many widely-supported 3D file formats."""
+to many widely-supported 3D file formats.
+
+Turn .dcm filetypes into a 3D rendering
+
+"""
 
 from __future__ import annotations
 
@@ -109,12 +113,26 @@ def _resolve_level(volume: Volume, iso: str | float | None) -> float:
     return float(iso)
 
 
+def _resolve_prefilter(volume: Volume, sigma: float | None) -> float:
+    """How much Gaussian pre-smoothing (in voxels) to apply before surfacing.
+
+    MR (and other non-HU modalities) are noisy, and a raw iso-surface picks up
+    that speckle as a rough, bloated mesh. A mild Gaussian first gives a clean
+    skin/outer surface. CT is cleaner and users usually want crisp bone, so it
+    defaults to none. Pass an explicit value to override; 0 disables.
+    """
+    if sigma is not None:
+        return max(0.0, float(sigma))
+    return 0.0 if _is_hu_modality(volume) else 1.0
+
+
 def generate_mesh(
     volume: Volume,
     iso: str | float | None = None,
     step_size: int = 1,
     smooth: bool = True,
     largest_only: bool = False,
+    prefilter_sigma: float | None = None,
 ) -> Mesh:
     """Extract an iso-surface from ``volume`` using marching cubes.
 
@@ -132,9 +150,22 @@ def generate_mesh(
         Apply Laplacian smoothing to reduce the voxel "staircase".
     largest_only:
         Keep only the largest connected component (drops table, noise specks).
+    prefilter_sigma:
+        Gaussian smoothing (voxels) applied to the volume before surfacing.
+        ``None`` = modality-aware default (≈1 for MR, 0 for CT). Reduces MR
+        speckle for a cleaner outer surface. ``0`` disables it.
     """
-    level = _resolve_level(volume, iso)
-    data = volume.data
+    data = np.asarray(volume.data, dtype=np.float32)
+
+    sigma = _resolve_prefilter(volume, prefilter_sigma)
+    if sigma > 0:
+        from skimage.filters import gaussian
+
+        data = gaussian(data, sigma=sigma, preserve_range=True).astype(np.float32)
+
+    # Resolve the level on the same (smoothed) data the surface is cut from.
+    work = Volume(data=data, spacing=volume.spacing, metadata=volume.metadata)
+    level = _resolve_level(work, iso)
 
     if not (data.min() < level < data.max()):
         raise ValueError(
@@ -167,6 +198,7 @@ def generate_mesh(
             "iso_units": "HU" if _is_hu_modality(volume) else "raw intensity",
             "surface": "bone (HU preset)" if _is_hu_modality(volume)
             else "foreground / outer surface (auto)",
+            "prefilter_sigma": sigma,
             "n_vertices": int(len(mesh.vertices)),
             "n_faces": int(len(mesh.faces)),
             "watertight": bool(mesh.is_watertight),

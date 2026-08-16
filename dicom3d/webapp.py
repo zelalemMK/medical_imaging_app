@@ -73,6 +73,10 @@ PAGE = """<!doctype html>
   .toggle { background: none; border: 1px solid #313849; color: #9aa1ad;
          border-radius: 7px; padding: 5px 10px; font-size: .78rem; cursor: pointer;
          margin: 10px 0 0; }
+  .series-pick { background: #182034; border: 1px solid #2a3550; border-radius: 10px;
+         padding: 12px 14px; margin-bottom: 14px; }
+  .series-pick label { display: block; font-size: .82rem; color: #b9c2d4; margin-bottom: 8px; }
+  .series-pick select { width: 100%; }
   .files { list-style: none; padding: 0; margin: 16px 0 0; }
   .files li { display: flex; justify-content: space-between; align-items: center;
          padding: 10px 14px; background: #141821; border: 1px solid #262c38;
@@ -137,6 +141,11 @@ PAGE = """<!doctype html>
   <div id="status"></div>
 
   <div class="result" id="result">
+    <div class="series-pick" id="seriesPick" style="display:none">
+      <label for="seriesSel">This study has multiple series — choose one to reconstruct:</label>
+      <select id="seriesSel"></select>
+      <span class="spin" id="seriesSpin" style="display:none"></span>
+    </div>
     <div class="viewer-wrap">
       <model-viewer id="viewer" camera-controls auto-rotate
                     shadow-intensity="0.9" exposure="0.85" tone-mapping="neutral"
@@ -171,6 +180,64 @@ function showPicked() {
   picked.textContent = n ? (n === 1 ? fileInput.files[0].name : n + ' files selected') : 'No files selected';
 }
 
+let currentJob = null;
+
+function currentOpts() {
+  // Snapshot the form's reconstruction settings (not the files) for regenerate.
+  const fd = new FormData(form);
+  const o = new URLSearchParams();
+  for (const k of ['iso','step']) o.set(k, fd.get(k) ?? '');
+  if (fd.get('largest') !== null) o.set('largest', 'on');
+  if (fd.get('nifti') !== null) o.set('nifti', 'on');
+  return o;
+}
+
+function renderResult(data) {
+  statusEl.textContent = data.summary;
+  currentJob = data.job_id;
+
+  // Series picker: only shown when the study holds more than one series.
+  const pick = document.getElementById('seriesPick');
+  const sel = document.getElementById('seriesSel');
+  if (data.series && data.series.length > 1) {
+    sel.innerHTML = '';
+    data.series.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.index;
+      opt.textContent = `${s.description} — ${s.modality} ${s.num_slices} slices`;
+      if (s.used) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    pick.style.display = 'block';
+  } else {
+    pick.style.display = 'none';
+  }
+
+  const files = document.getElementById('files');
+  files.innerHTML = '';
+  data.files.forEach(f => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${f.name} <span class="meta">${f.size}</span></span>` +
+                   `<a href="${f.url}" download>Download</a>`;
+    files.appendChild(li);
+  });
+  const viewer = document.getElementById('viewer');
+  const preview = document.getElementById('preview');
+  preview.src = data.preview + '?t=' + Date.now();
+  if (data.model) {
+    viewer.setAttribute('src', data.model + '?t=' + Date.now());
+    viewer.setAttribute('poster', data.preview + '?t=' + Date.now());
+    viewer.parentElement.style.display = 'block';
+    preview.style.display = 'none';
+    document.getElementById('toggle').style.display = 'inline-block';
+  } else {
+    viewer.parentElement.style.display = 'none';
+    preview.style.display = 'block';
+    document.getElementById('toggle').style.display = 'none';
+  }
+  document.getElementById('result').style.display = 'block';
+}
+
 form.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   if (!fileInput.files.length) { statusEl.textContent = 'Please choose a file first.'; return; }
@@ -183,34 +250,30 @@ form.addEventListener('submit', async (ev) => {
     const res = await fetch('/api/convert', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Conversion failed');
-    statusEl.textContent = data.summary;
-    const files = document.getElementById('files');
-    files.innerHTML = '';
-    data.files.forEach(f => {
-      const li = document.createElement('li');
-      li.innerHTML = `<span>${f.name} <span class="meta">${f.size}</span></span>` +
-                     `<a href="${f.url}" download>Download</a>`;
-      files.appendChild(li);
-    });
-    const viewer = document.getElementById('viewer');
-    const preview = document.getElementById('preview');
-    preview.src = data.preview + '?t=' + Date.now();
-    if (data.model) {
-      viewer.setAttribute('src', data.model + '?t=' + Date.now());
-      viewer.setAttribute('poster', data.preview + '?t=' + Date.now());
-      viewer.parentElement.style.display = 'block';
-      preview.style.display = 'none';
-      document.getElementById('toggle').style.display = 'inline-block';
-    } else {
-      viewer.parentElement.style.display = 'none';
-      preview.style.display = 'block';
-      document.getElementById('toggle').style.display = 'none';
-    }
-    document.getElementById('result').style.display = 'block';
+    renderResult(data);
   } catch (e) {
     statusEl.textContent = 'Error: ' + e.message;
   } finally {
     go.disabled = false;
+  }
+});
+
+document.getElementById('seriesSel').addEventListener('change', async (ev) => {
+  if (!currentJob) return;
+  const spin = document.getElementById('seriesSpin');
+  spin.style.display = 'inline-block';
+  const body = currentOpts();
+  body.set('job_id', currentJob);
+  body.set('series', ev.target.value);
+  try {
+    const res = await fetch('/api/regenerate', { method: 'POST', body });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Regeneration failed');
+    renderResult(data);
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+  } finally {
+    spin.style.display = 'none';
   }
 });
 
@@ -237,57 +300,67 @@ def _human(n: int) -> str:
     return f"{n / 1_048_576:.1f} MB" if n >= 1_048_576 else f"{n / 1024:.0f} KB"
 
 
-@app.post("/api/convert")
-def convert():
-    files = request.files.getlist("files")
-    if not files or all(not f.filename for f in files):
-        return jsonify(error="No files uploaded."), 400
+def _source_from_upload(upload_dir: Path) -> tuple[Path, list[Path]]:
+    """Derive (primary source, extra files) from a job's uploaded files.
 
-    job_id = uuid.uuid4().hex[:12]
+    A single uploaded .zip is the source; otherwise every upload is a loose
+    DICOM file.
+    """
+    saved = sorted(p for p in upload_dir.iterdir() if p.is_file())
+    zips = [p for p in saved if p.suffix.lower() == ".zip"]
+    if zips:
+        return zips[0], []
+    return saved[0], saved[1:]
+
+
+def _run_job(job_id: str, opts: dict):
+    """Build the volume/mesh for a job and return the JSON-able response dict.
+
+    Reused by both /api/convert (first run) and /api/regenerate (re-run with a
+    different series/settings on the already-uploaded files).
+    """
     job_dir = JOBS_ROOT / job_id
     upload_dir = job_dir / "upload"
     out_dir = job_dir / "out"
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    if not upload_dir.is_dir():
+        return jsonify(error="Job not found or expired."), 404
 
-    saved: list[Path] = []
-    for f in files:
-        if not f.filename:
-            continue
-        name = Path(f.filename).name  # strip any path components
-        dest = upload_dir / name
-        f.save(dest)
-        saved.append(dest)
-
-    # A single uploaded .zip is the primary source; otherwise treat every upload
-    # as a loose DICOM file.
-    zips = [p for p in saved if p.suffix.lower() == ".zip"]
-    if zips:
-        source, extra = zips[0], []
-    else:
-        source, extra = saved[0], saved[1:]
-
-    iso = request.form.get("iso") or None
-    step = int(request.form.get("step", 1) or 1)
-    largest = request.form.get("largest") is not None
-    want_nifti = request.form.get("nifti") is not None
-
+    source, extra = _source_from_upload(upload_dir)
     try:
-        vol = load_volume(source, extra_files=extra)
+        vol = load_volume(source, extra_files=extra, series=opts["series"])
         mesh = generate_mesh(
-            vol, iso=iso, step_size=step, smooth=True, largest_only=largest
+            vol,
+            iso=opts["iso"],
+            step_size=opts["step"],
+            smooth=True,
+            largest_only=opts["largest"],
         )
+        if out_dir.exists():
+            shutil.rmtree(out_dir, ignore_errors=True)
         written = export_mesh(mesh, out_dir, basename="model", formats=SUPPORTED_FORMATS)
-        if want_nifti:
+        if opts["nifti"]:
             written.append(export_nifti(vol, out_dir / "model.nii.gz"))
         preview_png(mesh, out_dir / "preview.png")
     except Exception as exc:
-        shutil.rmtree(job_dir, ignore_errors=True)
         return jsonify(error=str(exc)), 422
 
     m = mesh.metadata
+    available = m.get("series_available", [])
+    used_uid = m.get("series_uid")
+    series_list = [
+        {
+            "index": i,
+            "description": s["description"] or "(no description)",
+            "modality": s["modality"],
+            "num_slices": s["num_slices"],
+            "used": s["series_uid"] == used_uid,
+        }
+        for i, s in enumerate(available)
+    ]
     summary = (
-        f"{m.get('modality') or 'Scan'} - {m['num_slices']} slices - "
-        f"iso {mesh.level:g} HU - {m['n_vertices']:,} vertices, {m['n_faces']:,} faces."
+        f"{m.get('modality') or 'Scan'} · {m.get('series') or 'series'} · "
+        f"{m['num_slices']} slices · {mesh.level:g} {m.get('iso_units', '')} · "
+        f"{m['n_vertices']:,} verts / {m['n_faces']:,} faces"
     )
     file_list = [
         {
@@ -299,11 +372,64 @@ def convert():
     ]
     glb = next((f["url"] for f in file_list if f["name"].endswith(".glb")), None)
     return jsonify(
+        job_id=job_id,
         summary=summary,
         files=file_list,
         model=glb,  # GLB drives the interactive <model-viewer>
         preview=f"/download/{job_id}/preview.png",
+        series=series_list,
     )
+
+
+def _opts_from_form() -> dict:
+    return {
+        "iso": request.form.get("iso") or None,
+        "step": int(request.form.get("step", 1) or 1),
+        "largest": request.form.get("largest") is not None,
+        "nifti": request.form.get("nifti") is not None,
+        "series": _parse_series(request.form.get("series")),
+    }
+
+
+def _parse_series(value):
+    """Series selector: blank -> None (largest); digits -> int index; else text."""
+    if value is None or value == "":
+        return None
+    value = value.strip()
+    if value.lstrip("-").isdigit():
+        return int(value)
+    return value
+
+
+@app.post("/api/convert")
+def convert():
+    files = request.files.getlist("files")
+    if not files or all(not f.filename for f in files):
+        return jsonify(error="No files uploaded."), 400
+
+    job_id = uuid.uuid4().hex[:12]
+    upload_dir = JOBS_ROOT / job_id / "upload"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    for f in files:
+        if not f.filename:
+            continue
+        f.save(upload_dir / Path(f.filename).name)  # strip any path components
+
+    resp = _run_job(job_id, _opts_from_form())
+    if resp.status_code >= 400:
+        shutil.rmtree(JOBS_ROOT / job_id, ignore_errors=True)
+    return resp
+
+
+@app.post("/api/regenerate")
+def regenerate():
+    """Re-run an existing job with a different series/settings, reusing the
+    already-uploaded files (no re-upload)."""
+    job_id = request.form.get("job_id", "")
+    if not job_id.isalnum() or not (JOBS_ROOT / job_id / "upload").is_dir():
+        return jsonify(error="Job not found or expired; please re-upload."), 404
+    return _run_job(job_id, _opts_from_form())
 
 
 @app.get("/download/<job_id>/<path:filename>")

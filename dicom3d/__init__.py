@@ -8,7 +8,7 @@ Public API
 >>> export_mesh(mesh, "out/", formats=("stl", "glb"))
 """
 
-from .loader import Volume, build_volume, load_volume
+from .loader import Volume, build_volume, list_series, load_volume
 from .mesh import (
     HU_PRESETS,
     SUPPORTED_FORMATS,
@@ -23,6 +23,7 @@ __all__ = [
     "Mesh",
     "load_volume",
     "build_volume",
+    "list_series",
     "generate_mesh",
     "export_mesh",
     "preview_png",

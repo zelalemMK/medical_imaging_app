@@ -175,6 +175,44 @@ def test_ct_presets_ignored_for_mr(tmp_path):
     assert mesh.metadata["iso_units"] == "raw intensity"
 
 
+def test_multiple_series_are_separated(tmp_path):
+    """A study with several series (same shape, different SeriesInstanceUID)
+    must not be stacked together.
+
+    Regression test for real MR exports that bundle T1/T2/FLAIR/etc.: the old
+    shape-based grouping merged two same-size series into one garbled volume.
+    """
+    from dicom3d import list_series, load_volume
+
+    make_series(tmp_path / "a", n=16, size=48)  # series A: 16 slices
+    make_series(tmp_path / "b", n=10, size=48)  # series B: 10 slices, same shape
+    files = sorted((tmp_path / "a").glob("*.dcm")) + sorted(
+        (tmp_path / "b").glob("*.dcm")
+    )
+
+    infos = list_series(files[0], extra_files=files[1:])
+    assert len(infos) == 2
+    assert infos[0]["num_slices"] == 16  # largest first
+
+    # Default: reconstruct the largest series only — NOT the merged 26 slices.
+    vol = load_volume(files[0], extra_files=files[1:])
+    assert vol.metadata["num_series_available"] == 2
+    assert vol.metadata["num_slices"] == 16
+
+    # Explicit selection of the smaller series by index.
+    vol_b = load_volume(files[0], extra_files=files[1:], series=1)
+    assert vol_b.metadata["num_slices"] == 10
+
+
+def test_series_selector_out_of_range_raises(tmp_path):
+    from dicom3d import load_volume
+
+    make_series(tmp_path / "a", n=8, size=40)
+    files = sorted((tmp_path / "a").glob("*.dcm"))
+    with pytest.raises(ValueError, match="out of range"):
+        load_volume(files[0], extra_files=files[1:], series=5)
+
+
 def test_nifti_export(phantom_zip, tmp_path):
     import nibabel as nib
 

@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from .loader import load_volume
+from .loader import list_series, load_volume
 from .mesh import HU_PRESETS, SUPPORTED_FORMATS, export_mesh, generate_mesh
 from .render import export_nifti, preview_png
 
@@ -43,6 +43,21 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--series",
+        default=None,
+        help=(
+            "Which acquisition to reconstruct when the input holds several "
+            "(a DICOM export often mixes T1/T2/FLAIR/etc.). An index (0 = largest), "
+            "a SeriesInstanceUID, or a description substring (e.g. 'T1 SAG'). "
+            "Default: the largest series."
+        ),
+    )
+    p.add_argument(
+        "--list-series",
+        action="store_true",
+        help="List the image series found in the input and exit (no reconstruction).",
+    )
+    p.add_argument(
         "-f",
         "--formats",
         default=",".join(SUPPORTED_FORMATS),
@@ -56,6 +71,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--no-smooth", action="store_true", help="Disable Laplacian smoothing."
+    )
+    p.add_argument(
+        "--smooth-volume",
+        type=float,
+        default=None,
+        metavar="SIGMA",
+        help=(
+            "Gaussian pre-smoothing (voxels) before surfacing. Default is "
+            "modality-aware (~1 for MR to reduce speckle, 0 for CT). Set 0 to "
+            "disable, or a larger value for a smoother/cleaner surface."
+        ),
     )
     p.add_argument(
         "--largest-only",
@@ -90,14 +116,45 @@ def main(argv: list[str] | None = None) -> int:
 
     source, extra = _resolve_inputs(args.inputs)
 
+    # Optionally just enumerate the series and exit.
+    if args.list_series:
+        try:
+            series = list_series(source, extra_files=extra)
+        except Exception as exc:
+            print(f"error: could not read input: {exc}", file=sys.stderr)
+            return 1
+        print(f"Found {len(series)} image series:")
+        for i, s in enumerate(series):
+            print(
+                f"  [{i}] {s['description'] or '(no description)':32} "
+                f"{s['modality']:3} {s['num_slices']:4d} slices  "
+                f"{s['rows']}x{s['cols']}"
+            )
+        print("\nReconstruct one with:  --series <index | description substring>")
+        return 0
+
     t0 = time.time()
     print(f"[1/4] Loading DICOM from {len(args.inputs)} input(s)...")
     try:
-        vol = load_volume(source, extra_files=extra)
+        # Accept an integer index or a text selector for --series.
+        sel: object = args.series
+        if isinstance(sel, str) and sel.strip().lstrip("-").isdigit():
+            sel = int(sel)
+        vol = load_volume(source, extra_files=extra, series=sel)
     except Exception as exc:
         print(f"error: could not load volume: {exc}", file=sys.stderr)
         return 1
     m = vol.metadata
+    n_series = m.get("num_series_available", 1)
+    if n_series > 1 and args.series is None:
+        others = ", ".join(
+            f"{s['description'] or '(no desc)'} [{s['num_slices']}]"
+            for s in m.get("series_available", [])
+        )
+        print(
+            f"      note: input has {n_series} series; auto-selected the largest. "
+            f"Use --list-series / --series to choose. All: {others}"
+        )
     print(
         f"      {m['modality'] or 'scan'} '{m['series'] or m['study'] or 'series'}' "
         f"- {m['num_slices']} slices, shape {m['shape']}, "
@@ -112,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
             step_size=args.step,
             smooth=not args.no_smooth,
             largest_only=args.largest_only,
+            prefilter_sigma=args.smooth_volume,
         )
     except Exception as exc:
         print(f"error: mesh generation failed: {exc}", file=sys.stderr)

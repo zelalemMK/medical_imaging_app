@@ -39,6 +39,10 @@ python -m dicom3d.cli scan.zip -o output
 # Several loose .dcm files, bone surface, also write a NIfTI volume
 python -m dicom3d.cli slice_*.dcm --iso bone --nifti
 
+# A study with several series (T1/T2/FLAIR/...): see what's inside, then pick one
+python -m dicom3d.cli study.zip --list-series
+python -m dicom3d.cli study.zip --series "T2 TRA" -o output   # or --series 3
+
 # A directory, lighter mesh, keep only the main object (drops CT table/noise)
 python -m dicom3d.cli ./series_dir/ --step 2 --largest-only
 ```
@@ -50,12 +54,25 @@ If installed with `pip install -e .`, the `dicom3d` command is available directl
 | Option | Meaning |
 |---|---|
 | `--iso` | Iso-surface level: a number, `auto`, or a CT preset: `bone` (300 HU), `skin` (-300), `soft-tissue` (40), `lung` (-600). Default `auto` = bone for CT; for **MRI** an automatic foreground/outer-surface threshold (see below). |
+| `--series` | Which acquisition to reconstruct when a study holds several: an index (`0` = largest), a `SeriesInstanceUID`, or a description substring (e.g. `"T1 SAG"`). Default: the largest series. |
+| `--list-series` | List the image series in the input and exit (no reconstruction). |
 | `-f, --formats` | Comma-separated subset of `stl,obj,ply,glb`. |
 | `--step` | Marching-cubes step; `>1` = coarser, lighter, faster. |
-| `--no-smooth` | Disable Laplacian (Taubin) smoothing. |
+| `--smooth-volume` | Gaussian pre-smoothing (voxels) before surfacing. Default is modality-aware (~1 for MR to reduce speckle, 0 for CT). |
+| `--no-smooth` | Disable Laplacian (Taubin) mesh smoothing. |
 | `--largest-only` | Keep only the largest connected component. |
 | `--nifti` | Also export the raw volume as `.nii.gz`. |
 | `--no-preview` | Skip the PNG preview. |
+
+### Studies with multiple series
+
+A single DICOM export often bundles several acquisitions (T1, T2, FLAIR, DWI,
+pre/post-contrast, localizers) — sometimes with the *same* image dimensions.
+These must never be stacked together. dicom3d groups slices by
+`SeriesInstanceUID` and reconstructs **one** series (the largest by default);
+use `--list-series` / `--series` (CLI) or the series dropdown (web UI) to choose
+a different one. In the web UI, switching series re-runs on the already-uploaded
+files — no re-upload.
 
 ## Web UI
 
