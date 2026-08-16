@@ -46,24 +46,64 @@ class Mesh:
         )
 
 
+def _is_hu_modality(volume: Volume) -> bool:
+    """CT is calibrated in Hounsfield Units; MR/US/etc. are not.
+
+    Only for HU-calibrated data do the numeric tissue presets (bone = 300 HU,
+    ...) mean anything. MR intensities are arbitrary and sequence-dependent, so
+    a fixed constant threshold produces a wrong or empty surface there.
+    """
+    return volume.metadata.get("modality", "") in ("CT", "CTPROTOCOL")
+
+
+def _auto_level(volume: Volume) -> float:
+    """Pick a sensible iso-value automatically for the given modality.
+
+    * CT  -> the bone preset (300 HU), the usual first thing people want.
+    * MR/other -> an Otsu threshold separating the imaged anatomy (bright) from
+      background air (dark), i.e. the outer skin/scalp surface. This is the
+      right default for MR, where there is no Hounsfield scale to key off and
+      the naive (min+max)/2 midpoint is easily thrown off by a few bright
+      voxels (fat, flow, hyperintensities).
+    """
+    if _is_hu_modality(volume):
+        return HU_PRESETS["bone"]
+
+    finite = volume.data[np.isfinite(volume.data)].astype(np.float32)
+    lo, hi = float(finite.min()), float(finite.max())
+    if hi <= lo:
+        raise ValueError("Volume has no intensity variation; nothing to extract.")
+    try:
+        from skimage.filters import threshold_otsu
+
+        level = float(threshold_otsu(finite))
+    except Exception:
+        # Fallback: a low percentile still separates foreground from air.
+        level = float(np.percentile(finite, 60))
+    # Keep the threshold off the extreme ends so marching cubes has a surface.
+    margin = 0.02 * (hi - lo)
+    return min(max(level, lo + margin), hi - margin)
+
+
 def _resolve_level(volume: Volume, iso: str | float | None) -> float:
     if iso is None:
-        # Default: for CT use the bone preset, otherwise the midpoint of the
-        # intensity range which gives a reasonable outer surface for MR/other.
-        modality = volume.metadata.get("modality", "")
-        if modality == "CT":
-            return HU_PRESETS["bone"]
-        lo, hi = float(volume.data.min()), float(volume.data.max())
-        return lo + 0.5 * (hi - lo)
+        return _auto_level(volume)
     if isinstance(iso, str):
         key = iso.strip().lower()
+        if key in ("", "auto"):
+            return _auto_level(volume)
         if key in HU_PRESETS:
-            return HU_PRESETS[key]
+            # HU presets only make sense for HU-calibrated data. For MR/other,
+            # fall back to the automatic foreground threshold rather than
+            # applying a meaningless constant that yields a wrong surface.
+            if _is_hu_modality(volume):
+                return HU_PRESETS[key]
+            return _auto_level(volume)
         try:
             return float(key)
         except ValueError as exc:
             raise ValueError(
-                f"Unknown iso level {iso!r}. Use a number or one of: "
+                f"Unknown iso level {iso!r}. Use a number, 'auto', or one of: "
                 f"{', '.join(HU_PRESETS)}."
             ) from exc
     return float(iso)
@@ -81,8 +121,10 @@ def generate_mesh(
     Parameters
     ----------
     iso:
-        Iso-value: a raw scalar, or a named CT preset (``bone``, ``skin``,
-        ``soft-tissue``, ``lung``). Defaults to bone for CT, mid-range otherwise.
+        Iso-value: a raw scalar, ``"auto"``/``None``, or a named CT preset
+        (``bone``, ``skin``, ``soft-tissue``, ``lung``). Default (auto) is the
+        bone preset for CT, or an Otsu foreground threshold for MR/other
+        modalities, which have no Hounsfield scale for the presets to key off.
     step_size:
         Marching-cubes step. ``>1`` yields a coarser, lighter mesh (faster,
         smaller files); ``1`` is full resolution.
@@ -122,6 +164,9 @@ def generate_mesh(
     meta.update(
         {
             "iso_level": level,
+            "iso_units": "HU" if _is_hu_modality(volume) else "raw intensity",
+            "surface": "bone (HU preset)" if _is_hu_modality(volume)
+            else "foreground / outer surface (auto)",
             "n_vertices": int(len(mesh.vertices)),
             "n_faces": int(len(mesh.faces)),
             "watertight": bool(mesh.is_watertight),
