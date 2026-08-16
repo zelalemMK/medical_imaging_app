@@ -1,0 +1,10 @@
+services:
+  dicom3d:
+    build: .
+    image: dicom3d:latest
+    ports:
+      - "5000:5000"
+    # Persist generated jobs outside the container (optional).
+    # volumes:
+    #   - ./jobs:/tmp/dicom3d_jobs
+    restart: unless-stopped

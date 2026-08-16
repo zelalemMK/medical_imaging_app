@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Generated artifacts
+output/
+samples/phantom_dcm/
+samples/phantom.zip
+*.stl
+*.obj
+*.ply
+*.glb
+*.nii.gz
+
+# OS
+.DS_Store

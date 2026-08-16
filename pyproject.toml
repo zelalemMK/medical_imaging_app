@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dicom3d"
+version = "0.1.0"
+description = "Convert a DICOM series (zip or loose .dcm files) into a 3D surface model in many widely-supported formats (STL, OBJ, PLY, GLB)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "pydicom>=3.0",
+    "numpy>=2.0",
+    "scikit-image>=0.24",
+    "trimesh>=4.0",
+    "matplotlib>=3.8",
+    "nibabel>=5.0",
+]
+
+[project.optional-dependencies]
+web = ["flask>=3.0", "gunicorn>=21.0"]
+test = ["pytest>=8.0"]
+
+[project.scripts]
+dicom3d = "dicom3d.cli:main"
+dicom3d-web = "dicom3d.webapp:main"
+
+[tool.setuptools]
+packages = ["dicom3d"]
+
+[tool.setuptools.package-data]
+dicom3d = ["static/*"]

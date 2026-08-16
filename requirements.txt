@@ -1,0 +1,15 @@
+# Core pipeline
+pydicom>=3.0
+numpy>=2.0
+scikit-image>=0.24
+trimesh>=4.0
+
+# Preview render + medical volume export
+matplotlib>=3.8
+nibabel>=5.0
+
+# Web UI
+flask>=3.0
+
+# Tests (optional)
+pytest>=8.0
