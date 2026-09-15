@@ -1,0 +1,13 @@
+# PHP / Composer
+/vendor/
+# composer.lock IS committed for reproducible CI (dev tooling only; no runtime deps).
+
+# PHPUnit
+/.phpunit.cache/
+/.phpunit.result.cache
+/coverage/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

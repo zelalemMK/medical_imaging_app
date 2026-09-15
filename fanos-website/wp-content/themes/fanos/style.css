@@ -1,0 +1,49 @@
+/*
+Theme Name:        FANOS
+Theme URI:         https://fanosconsulting.com
+Author:            Zelalem Mekonnen
+Author URI:        https://fanosconsulting.com
+Description:       Warm, accessible, mobile-first theme for the FANOS public website (Phase 1). Centres the Alchemizing Stories library with a clear SHARE overview, partner and contact pathways, and a newsletter signup. Content types and integrations live in the companion FANOS Core plugin.
+Version:           1.0.0
+Requires at least: 6.4
+Requires PHP:      8.1
+License:           Proprietary
+Text Domain:       fanos
+Tags:              accessibility-ready, custom-menu, featured-images, translation-ready
+*/
+
+/*
+ * Presentational styles live in assets/css/main.css (enqueued from functions.php)
+ * so they can be versioned and cached independently. This file carries the theme
+ * header WordPress requires, plus the accessibility helpers themes are expected to
+ * ship in style.css itself.
+ */
+
+.screen-reader-text {
+	border: 0;
+	clip: rect(1px, 1px, 1px, 1px);
+	clip-path: inset(50%);
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	padding: 0;
+	position: absolute !important;
+	width: 1px;
+	word-wrap: normal !important;
+}
+
+.skip-link:focus {
+	background-color: #f7f0e3;
+	color: #1d2945;
+	clip: auto;
+	clip-path: none;
+	display: block;
+	font-weight: 700;
+	height: auto;
+	left: 8px;
+	padding: 12px 20px;
+	top: 8px;
+	width: auto;
+	z-index: 100000;
+	position: fixed;
+}

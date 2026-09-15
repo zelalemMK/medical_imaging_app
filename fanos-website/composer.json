@@ -1,0 +1,33 @@
+{
+    "name": "fanos/website",
+    "description": "FANOS public website — Phase 1 (Alchemizing Stories Hub and public home). Custom WordPress theme and core plugin.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "brain/monkey": "^2.6",
+        "mockery/mockery": "^1.6",
+        "yoast/phpunit-polyfills": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "FANOS\\Core\\": "wp-content/plugins/fanos-core/src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "FANOS\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit",
+        "lint": "find wp-content -name '*.php' -print0 | xargs -0 -n1 -P4 php -l"
+    }
+}
